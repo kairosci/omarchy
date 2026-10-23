@@ -186,3 +186,51 @@ TEST_KEYBOARD_SELECTION=$'XKBLAYOUT=us,fr\nXKBVARIANT=intl,\n' assert_input "men
 TEST_KEYBOARD_SELECTION=$'XKBLAYOUT=us,fr\nXKBVARIANT=intl,\n' assert_greeter_input "menu selections leave the greeter keyboard unchanged" "[jp] [] []" $'XKBLAYOUT=jp\n'
 
 TEST_KEYBOARD_SELECTION=$'XKBLAYOUT=us,ru\nXKBVARIANT=,phonetic\n' assert_input "saved non-Latin selections retain the layout shortcut" "[us,ru] [,phonetic] [$toggle_options]" $'XKBLAYOUT=us\n'
+
+# Legacy personal options override the defaults fixed by #14939.
+fixture=$(mktemp -d)
+trap 'rm -rf "$fixture"' EXIT
+mkdir -p "$fixture/.config/hypr"
+input="$fixture/.config/hypr/input.lua"
+cat >"$input" <<'LUA'
+-- kb_options = "compose:caps,shift:both_capslock_cancel"
+hl.config({ input = {
+  kb_layout = "it,us",
+  kb_options = 'compose:caps,shift:both_capslock_cancel,grp:alts_toggle',
+} })
+LUA
+cp "$input" "$fixture/original"
+HOME="$fixture" bash -euo pipefail "$ROOT/migrations/1792702724.sh" >"$fixture/migration.log" 2>&1 ||
+  fail "legacy Caps Lock migration succeeds" "$(cat "$fixture/migration.log")"
+options=$(lua - "$input" <<'LUA'
+hl = { config = function(config)
+  assert(config.input.kb_layout == "it,us")
+  print(config.input.kb_options)
+end }
+dofile(arg[1])
+LUA
+)
+[[ $options == "omarchy:shift_caps_compose,grp:alts_toggle" ]] ||
+  fail "legacy Caps Lock migration preserves layout switching" "$options"
+cmp "$fixture/original" "$input.before-caps-lock-migration" || fail "Caps Lock migration backs up original input configuration"
+cp "$input" "$fixture/migrated"
+HOME="$fixture" bash -euo pipefail "$ROOT/migrations/1792702724.sh" >"$fixture/repeat.log" 2>&1 ||
+  fail "Caps Lock migration succeeds on repeat runs" "$(cat "$fixture/repeat.log")"
+cmp "$fixture/migrated" "$input" || fail "Caps Lock migration is idempotent"
+pass "legacy personal options adopt normal Caps Lock without losing layout switching"
+
+cat >"$input" <<'LUA'
+-- kb_options = "compose:caps,shift:both_capslock_cancel"
+hl.config({ input = {
+  kb_options = "compose:caps,grp:alts_toggle",
+} })
+LUA
+cp "$input" "$fixture/custom"
+HOME="$fixture" bash -euo pipefail "$ROOT/migrations/1792702724.sh" >"$fixture/custom.log" 2>&1 ||
+  fail "custom Compose migration is a no-op" "$(cat "$fixture/custom.log")"
+cmp "$fixture/custom" "$input" || fail "Caps Lock migration preserves intentional standalone Compose remaps and comments"
+rm "$input"
+HOME="$fixture" bash -euo pipefail "$ROOT/migrations/1792702724.sh" >"$fixture/absent.log" 2>&1 ||
+  fail "Caps Lock migration accepts absent personal input config" "$(cat "$fixture/absent.log")"
+[[ ! -e $input ]] || fail "Caps Lock migration leaves absent config alone"
+pass "custom Compose mappings and missing personal configs remain unchanged"
