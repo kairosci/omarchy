@@ -5,6 +5,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 fixture=$(mktemp -d)
 trap 'rm -rf "$fixture"' EXIT
 export fixture
+mkdir -p "$fixture/tmp"
+export TMPDIR="$fixture/tmp"
 mkdir -p "$fixture/bin" "$fixture/etc/sudoers.d" "$fixture/etc/pam.d"
 sed "s#/etc/#$fixture/etc/#g" "$ROOT/bin/omarchy-setup-security-audit" >"$fixture/command"
 cat >"$fixture/bin/sudo" <<'STUB'
@@ -14,9 +16,9 @@ printf '%s\n' "$*" >>"$fixture/calls"
 [[ ${FAIL_COMMAND:-} != "$1" ]] || exit 1
 case "$1" in
   mkdir | tee | install)
-    # Refuse any write outside the fixture or a mktemp input.
+    # Refuse any write outside the fixture.
     for arg in "$@"; do
-      if [[ $arg == /* && $arg != "$fixture/"* && $arg != /tmp/* ]]; then
+      if [[ $arg == /* && $arg != "$fixture/"* ]]; then
         exit 99
       fi
     done
