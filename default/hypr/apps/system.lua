@@ -1,10 +1,10 @@
--- Service terminals use normal window management; only dialogs and viewers float.
+-- Floating dialogs, viewers and explicitly floating TUI apps.
 o.window({ tag = "floating-window" }, { float = true })
 o.window({ tag = "floating-window" }, { center = true })
 o.window({ tag = "floating-window" }, { size = { 875, 600 } })
 
 o.window(
-  "(org.gnome.NautilusPreviewer|org.gnome.Evince|About|imv|mpv)",
+  "(org.gnome.NautilusPreviewer|org.gnome.Evince|About|TUI.float|imv|mpv)",
   {
     tag = "+floating-window",
   }
