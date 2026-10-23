@@ -11,10 +11,11 @@ path = Path.home() / ".config/hypr/input.lua"
 if not path.is_file():
   raise SystemExit(0)
 
-original = path.read_text()
+# Lua accepts any bytes in comments, so an odd encoding must not stall the queue.
+original = path.read_text(errors="surrogateescape")
 
 def migrate(match):
-  options = match[3].split(",")
+  options = [option.strip() for option in match[3].split(",")]
   if "compose:caps" not in options or "shift:both_capslock_cancel" not in options:
     return match[0]
   options = [option for option in options if option != "shift:both_capslock_cancel"]
@@ -29,6 +30,6 @@ if updated != original:
       raise SystemExit(f"Backup differs from the current configuration: {backup}; review it before retrying.")
   else:
     shutil.copy2(path, backup)
-  path.write_text(updated)
+  path.write_text(updated, errors="surrogateescape")
   print(f"Updated {path}; previous configuration saved to {backup}")
 PYTHON

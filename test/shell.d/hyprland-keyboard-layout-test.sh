@@ -196,9 +196,10 @@ cat >"$input" <<'LUA'
 -- kb_options = "compose:caps,shift:both_capslock_cancel"
 hl.config({ input = {
   kb_layout = "it,us",
-  kb_options = 'compose:caps,shift:both_capslock_cancel,grp:alts_toggle',
+  kb_options = 'compose:caps, shift:both_capslock_cancel,grp:alts_toggle',
 } })
 LUA
+printf -- '-- Caf\xe9\n' >>"$input"
 cp "$input" "$fixture/original"
 HOME="$fixture" bash -euo pipefail "$ROOT/migrations/1792702724.sh" >"$fixture/migration.log" 2>&1 ||
   fail "legacy Caps Lock migration succeeds" "$(cat "$fixture/migration.log")"
@@ -236,20 +237,24 @@ HOME="$fixture" bash -euo pipefail "$ROOT/migrations/1792702724.sh" >"$fixture/a
 pass "custom Compose mappings and missing personal configs remain unchanged"
 
 # A failed write must not leave the migration permanently blocked by its backup.
-cp "$fixture/original" "$input"
-rm "$input.before-caps-lock-migration"
-chmod 444 "$input"
-if HOME="$fixture" bash -euo pipefail "$ROOT/migrations/1792702724.sh" >"$fixture/readonly.log" 2>&1; then
+if (( EUID == 0 )); then
+  skip "Caps Lock migration recovers after a failed write (root writes read-only files)"
+else
+  cp "$fixture/original" "$input"
+  rm "$input.before-caps-lock-migration"
+  chmod 444 "$input"
+  if HOME="$fixture" bash -euo pipefail "$ROOT/migrations/1792702724.sh" >"$fixture/readonly.log" 2>&1; then
+    chmod 644 "$input"
+    fail "Caps Lock migration reports an unwritable input config"
+  fi
   chmod 644 "$input"
-  fail "Caps Lock migration reports an unwritable input config"
+  cmp "$fixture/original" "$input.before-caps-lock-migration" || fail "failed write retains original backup"
+  HOME="$fixture" bash -euo pipefail "$ROOT/migrations/1792702724.sh" >"$fixture/retry.log" 2>&1 ||
+    fail "Caps Lock migration retries with a matching backup" "$(cat "$fixture/retry.log")"
+  cmp "$fixture/migrated" "$input" || fail "retry completes Caps Lock repair"
+  cmp "$fixture/original" "$input.before-caps-lock-migration" || fail "retry preserves the original backup"
+  pass "Caps Lock migration recovers after a failed write"
 fi
-chmod 644 "$input"
-cmp "$fixture/original" "$input.before-caps-lock-migration" || fail "failed write retains original backup"
-HOME="$fixture" bash -euo pipefail "$ROOT/migrations/1792702724.sh" >"$fixture/retry.log" 2>&1 ||
-  fail "Caps Lock migration retries with a matching backup" "$(cat "$fixture/retry.log")"
-cmp "$fixture/migrated" "$input" || fail "retry completes Caps Lock repair"
-cmp "$fixture/original" "$input.before-caps-lock-migration" || fail "retry preserves the original backup"
-pass "Caps Lock migration recovers after a failed write"
 
 cp "$fixture/original" "$input"
 printf '\n-- Changed since the backup\n' >>"$input"
