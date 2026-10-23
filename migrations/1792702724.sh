@@ -25,8 +25,10 @@ updated = re.sub(r"(?m)^([ \t]*kb_options[ \t]*=[ \t]*)([\"'])([^\"'\n]*)\2", mi
 if updated != original:
   backup = path.with_name(path.name + ".before-caps-lock-migration")
   if backup.exists():
-    raise SystemExit(f"Backup already exists: {backup}; review it before retrying.")
-  shutil.copy2(path, backup)
+    if backup.read_bytes() != path.read_bytes():
+      raise SystemExit(f"Backup differs from the current configuration: {backup}; review it before retrying.")
+  else:
+    shutil.copy2(path, backup)
   path.write_text(updated)
   print(f"Updated {path}; previous configuration saved to {backup}")
 PYTHON
