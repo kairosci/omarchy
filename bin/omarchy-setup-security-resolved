@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# omarchy:summary=Disable LLMNR and multicast DNS explicitly
+# omarchy:summary=Disable LLMNR and multicast DNS in systemd-resolved
 # omarchy:requires-sudo=true
 
 set -euo pipefail
@@ -8,7 +8,7 @@ set -euo pipefail
 case "${1:-}" in
   --help | -h)
     echo "Usage: omarchy-setup-security-resolved"
-    echo "Disables local hostname discovery; existing DNS service settings otherwise remain in place."
+    echo "Disables LLMNR and multicast DNS in systemd-resolved; discovery through Avahi remains enabled."
     exit 0
     ;;
   "") ;;
@@ -19,7 +19,7 @@ if (( $# > 1 )); then
   exit 2
 fi
 
-echo "Disables local hostname discovery; existing DNS service settings otherwise remain in place."
+echo "Disables LLMNR and multicast DNS in systemd-resolved; discovery through Avahi remains enabled."
 # Harden systemd-resolved against local name resolution poisoning
 sudo mkdir -p /etc/systemd/resolved.conf.d
 sudo tee /etc/systemd/resolved.conf.d/99-omarchy-hardening.conf >/dev/null <<'EOF'
