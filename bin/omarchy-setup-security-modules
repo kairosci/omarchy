@@ -54,5 +54,13 @@ blacklist hfs
 blacklist hfsplus
 blacklist jffs2
 EOF
-sudo "${rebuild[@]}"
+rebuild_log=$(mktemp)
+trap 'rm -f "$rebuild_log"' EXIT
+sudo "${rebuild[@]}" 2>&1 | tee "$rebuild_log"
+
+# limine-mkinitcpio can skip a failed kernel while returning success.
+if grep -q 'mkinitcpio failed for kernel' "$rebuild_log"; then
+  echo "A boot image was not rebuilt. Fix the error above and rerun this command before rebooting." >&2
+  exit 1
+fi
 echo "Reboot to apply module restrictions to the running system."

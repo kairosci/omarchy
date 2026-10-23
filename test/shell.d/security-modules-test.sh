@@ -31,7 +31,11 @@ case "$1" in
   visudo) [[ $2 == "-cf" && -s $3 ]] ;;
   augenrules) [[ $2 == "--load" ]] ;;
   sysctl) [[ $2 == "-p" && -s $3 ]] ;;
-  limine-mkinitcpio) ;;
+  limine-mkinitcpio)
+    if [[ ${SKIPPED_KERNEL:-0} == "1" ]]; then
+      echo "mkinitcpio failed for kernel linux-test" >&2
+    fi
+    ;;
   *) exit 99 ;;
 esac
 STUB
@@ -75,6 +79,12 @@ if FAIL_COMMAND=tee bash "$fixture/command" >/dev/null 2>&1; then
 fi
 if FAIL_COMMAND=limine-mkinitcpio bash "$fixture/command" >/dev/null 2>&1; then
   fail "limine-mkinitcpio failures propagate"
+fi
+if SKIPPED_KERNEL=1 bash "$fixture/command" >"$fixture/skipped.output" 2>&1; then
+  fail "skipped kernel rebuild must fail even when the builder exits zero"
+fi
+if grep -Fq 'Reboot to apply' "$fixture/skipped.output"; then
+  fail "incomplete rebuild must not recommend rebooting"
 fi
 rm -rf "$fixture/etc"
 if DEPENDENCIES_MISSING=1 bash "$fixture/command" >/dev/null 2>&1; then
