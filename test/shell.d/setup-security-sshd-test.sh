@@ -47,19 +47,15 @@ esac
 STUB
 cat >"$stub_bin/sudo" <<'STUB'
 #!/bin/bash
-case $1 in
-install)
-  destination="${TEST_ROOT:?}${4:?}"
-  /usr/bin/mkdir -p "${destination%/*}"
-  /usr/bin/install -Dm644 /dev/stdin "$destination"
-  ;;
-rm)
-  /usr/bin/rm -f "${TEST_ROOT:?}${3:?}"
-  ;;
-*)
-  exec "$@"
-  ;;
-esac
+args=()
+for arg in "$@"; do
+  if [[ $arg == /etc/* ]]; then
+    args+=("${TEST_ROOT:?}$arg")
+  else
+    args+=("$arg")
+  fi
+done
+exec "${args[@]}"
 STUB
 chmod +x "$stub_bin"/*
 
@@ -129,3 +125,28 @@ if grep -qF 'systemctl reload sshd.service' "$test_dir/root-override.calls"; the
   fail "SSH setup must not reload ineffective root login restrictions"
 fi
 pass "SSH setup checks effective root login restrictions"
+
+# A failed rerun must retain the password restrictions installed previously.
+for rejection in syntax root; do
+  scenario="existing-$rejection"
+  config="$test_dir/$scenario/root/etc/ssh/sshd_config.d/10-omarchy-hardening.conf"
+  mkdir -p "${config%/*}"
+  printf '# Existing policy\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n' >"$config"
+  chmod 600 "$config"
+  cp -p "$config" "$test_dir/original"
+  if [[ $rejection == "syntax" ]]; then
+    if SSHD_SYNTAX_VALID=0 run_setup "$scenario" >"$test_dir/$scenario.output" 2>&1; then
+      fail "SSH setup must reject invalid configuration on rerun"
+    fi
+  else
+    if SSHD_ROOT_LOGIN=prohibit-password run_setup "$scenario" >"$test_dir/$scenario.output" 2>&1; then
+      fail "SSH setup must reject ineffective root restrictions on rerun"
+    fi
+  fi
+  cmp "$test_dir/original" "$config" || fail "failed SSH setup restores existing policy"
+  [[ $(stat -c %a "$config") == "600" ]] || fail "failed SSH setup preserves policy permissions"
+  if grep -qF 'systemctl reload sshd.service' "$test_dir/$scenario.calls"; then
+    fail "SSH setup must not reload rejected restrictions on rerun"
+  fi
+done
+pass "failed SSH setup restores existing restrictions and permissions"
